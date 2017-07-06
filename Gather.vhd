@@ -493,7 +493,7 @@ if clk'event and clk='1' then
 		if (actual_state_Main = '1') then
 			Received <= '0';
 		end if;
-		if (store = '1') then
+		if ((store = '1') and (num_partitions_processed < NUM_PARTITIONS) and (index_vertex_rx /= 3*PARTITION_SIZE_VERTEX(num_partitions_processed))) then
 			vertexset_received <= '0';
 		elsif (actual_state_Idle = '0') then
 			vertexset_received <= '1';

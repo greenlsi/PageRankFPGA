@@ -91,6 +91,9 @@ ARCHITECTURE behavior OF Test_conjunto IS
 	
 	signal valid : std_logic;
 
+	signal found_s : integer range 0 to 3 := 0;
+	signal partition_s : integer range -1 to NUM_PARTITIONS-1 := -1;
+
    -- Clock period definitions
    constant clk_period : time := 10 ns;
  
@@ -141,6 +144,7 @@ BEGIN
 		variable couter_reference : integer := 0;
 		variable empty : std_logic_vector(DATA_WIDTH-1 downto 0) := (others => 'Z');
 		variable first_time : std_logic := '1';
+		variable delay : integer := 0;
    begin
 	
 	if ((clk='0') and (first_time = '0')) then
@@ -220,15 +224,12 @@ BEGIN
 			
 			WHEN 1 =>
 				start_vertex_machine := '1';
-				found := 0;
 			
 			WHEN 2 =>
 				start_edge_machine := '1';
-				found := 0;
 			
 			WHEN 3 =>
 				start_update_machine := '1';
-				found := 0;
 			
 			WHEN others =>
 				start_vertex_machine := '0';
@@ -396,16 +397,25 @@ BEGIN
 				else
 					data_tocontrol <= (others => 'Z');
 				end if;
-				app_rd_data_valid <= '1';
-				app_rd_data_end <= '1';
+				if delay = 0 then
+					if found_s = found and partition_s = partition then
+						app_rd_data_valid <= '1';
+						app_rd_data_end <= '1';
+					else
+						delay := NUM_DELAY;
+					end if;
+				end if;
 			elsif ((app_en = '1') and (app_cmd = "000") and (app_wdf_wren = '1') and (app_wdf_wren = '1')) then
 				vertex_set(partition, PARTITION_INIT_VERTEX_ARRAY(partition) - to_integer(unsigned(addr))) := data_fromcontrol;
+				if delay = 0 then
+					if found_s /= found or partition_s /= partition then
+						delay := NUM_DELAY;
+					end if;
+				end if;
 			else
 				data_tocontrol <= (others => 'Z');
 			end if;
 			
-			start_vertex_machine := '0';
-			found := 0;
 		
 		elsif (start_edge_machine = '1') then
 		
@@ -591,42 +601,61 @@ BEGIN
 			end case;
 			
 			if ((app_cmd = "001") and (app_en = '1')) then	
-				if ((PARTITION_INIT_EDGE_ARRAY(partition) - to_integer(unsigned(addr))) = addr_anterior) then
-					counter2(partition) := counter2(partition) + 1;
-				else
-					counter2(partition) := 1;
-				end if;
 				if (counter2(partition) < 2) then
 					data_tocontrol <= std_logic_vector(to_unsigned(edges(PARTITION_INIT_EDGE_ARRAY(partition) - to_integer(unsigned(addr))),DATA_WIDTH));
 					addr_anterior := PARTITION_INIT_EDGE_ARRAY(partition) - to_integer(unsigned(addr));
 				else
 					data_tocontrol <= (others => 'Z');
 				end if;
-				app_rd_data_valid <= '1';
-				app_rd_data_end <= '1';
+				if delay = 0 then
+					if found_s = found and partition_s = partition then
+						if ((PARTITION_INIT_EDGE_ARRAY(partition) - to_integer(unsigned(addr))) = addr_anterior) then
+							counter2(partition) := counter2(partition) + 1;
+						else
+							counter2(partition) := 1;
+						end if;
+						app_rd_data_valid <= '1';
+						app_rd_data_end <= '1';
+					else
+						delay := NUM_DELAY;
+						app_rd_data_valid <= '0';
+						app_rd_data_end <= '0';
+					end if;
+				end if;
 			else
 				data_tocontrol <= (others => 'Z');
 			end if;
 			
-			start_edge_machine := '0';
-			found := 0;
 		
 		elsif (start_update_machine = '1') then
 		
 			if ((app_en = '1') and (app_cmd = "000") and (app_wdf_wren = '1') and (app_wdf_wren = '1')) then
 				update_set(partition, PARTITION_INIT_UPDATE_ARRAY(partition) - to_integer(unsigned(addr))) := data_fromcontrol;
+				if delay = 0 then
+					if found_s /= found or partition_s /= partition then
+						delay := NUM_DELAY;
+					end if;
+				end if;
 				app_rd_data_valid <= '0';
 				app_rd_data_end <= '0';
 			elsif ((app_cmd = "001") and (app_en = '1')) then	
 				data_tocontrol <= update_set(partition, PARTITION_INIT_UPDATE_ARRAY(partition) - to_integer(unsigned(addr)));
-				app_rd_data_valid <= '1';
-				app_rd_data_end <= '1';
+				if delay = 0 then
+					if found_s = found and partition_s = partition then
+						app_rd_data_valid <= '1';
+						app_rd_data_end <= '1';
+					else
+						app_rd_data_valid <= '0';
+						app_rd_data_end <= '0';
+						delay := NUM_DELAY;
+					end if;
+				end if;
 			else
 				data_tocontrol <= (others => 'Z');
 			end if;
 			
-			start_update_machine := '0';
-			found := 0;
+			found_s <= found;
+			partition_s <= partition;	
 			
 		else
 		
@@ -634,6 +663,25 @@ BEGIN
 			
 		end if;
 		
+		app_rdy <= '1';
+		app_wdf_rdy <= '1';
+
+		if (delay <= 1) then
+		   delay := 0;
+			if (found /= 0) then
+				found_s <= found;
+				partition_s <= partition;
+			end if;
+		else
+			delay := delay - 1;
+			app_rdy <= '0';
+			app_wdf_rdy <= '0';
+		end if;
+
+		start_vertex_machine := '0';
+		start_edge_machine := '0';
+		start_update_machine := '0';
+		found := 0;
 		
 		if (reset = '0') then
 			for i in 0 to NUM_PARTITIONS-1 loop
@@ -663,8 +711,6 @@ BEGIN
 		reset <= '1';
 		
       -- insert stimulus here 
-		app_rdy <= '1';
-		app_wdf_rdy <= '1';
 		
 
       wait;

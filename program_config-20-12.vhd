@@ -44,6 +44,9 @@ constant BITS_PRECISION: integer := 18; -- 0.0.18
 -- Factor de amortiguación (x100) --
 constant damping_factor: integer := 85;
 
+-- Ciclos de retardo en el acceso aleatorio a la DRAM --
+constant NUM_DELAY : integer := 50;
+
 -- Tamaño del Vertex set de cada partición --
 constant PARTITION_SIZE_VERTEX : partition_array :=
 (

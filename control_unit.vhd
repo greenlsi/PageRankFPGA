@@ -96,10 +96,10 @@ architecture Behavioral of control_unit is
 	TYPE vertexTX_estados IS (VertexTX_WAIT, VertexTX_CHECK_MEM, VertexTX_SET_ADDRESS, VertexTX_SEND);
 	SIGNAL vertexTX_state: vertexTX_estados;
 	
-	TYPE edge_estados IS (Edge_WAIT, Edge_CHECK_MEM, Edge_SET_ADDRESS, Edge_CHECK_INDEX, Edge_SEND, Edge_CHECK_RECEPTION, Edge_WAIT_1_CYCLE, Edge_RESET);
+	TYPE edge_estados IS (Edge_WAIT, Edge_CHECK_MEM, Edge_CHECK_INDEX, Edge_SEND, Edge_CHECK_RECEPTION, Edge_WAIT_1_CYCLE, Edge_RESET);
 	SIGNAL edge_state: edge_estados;
 	
-	TYPE updateTX_estados IS (UpdateTX_WAIT, UpdateTX_CHECK_MEM, UpdateTX_SET_ADDRESS, UpdateTX_CHECK_INDEX, UpdateTX_SEND, UpdateTX_CHECK_RECEPTION, Update_WAIT_1_CYCLE, UpdateTX_RESET);
+	TYPE updateTX_estados IS (UpdateTX_WAIT, UpdateTX_CHECK_MEM, UpdateTX_CHECK_INDEX, UpdateTX_SEND, UpdateTX_CHECK_RECEPTION, Update_WAIT_1_CYCLE, UpdateTX_RESET);
 	SIGNAL updateTX_state: updateTX_estados;
 	
 	TYPE updateRX_estados IS (UpdateRX_WAIT, UpdateRX_CHECK_INDEX, UpdateRX_CHECK_FIFO, UpdateRX_STORE_ADDRESS1, UpdateRX_STORE_ADDRESS2, UpdateRX_RESET);
@@ -188,6 +188,7 @@ if (clk'event AND clk='1') then
 		end if;
 				
 		if (enable_program = '0') then
+			finish_program <= '1';
 			control_state <= Control_WAIT;			
 		else
 			CASE control_state IS
@@ -305,7 +306,7 @@ if (clk'event AND clk='1') then
 	else 
 		CASE vertexTX_state IS
 			WHEN VertexTX_WAIT =>
-						if (start_vertexTX_machine = '1') then
+						if ((start_vertexTX_machine = '1') and (finish_vertexTX_machine = '0')) then
 							vertexTX_state <= VertexTX_CHECK_MEM;
 						else
 							control_signal <= "ZZ"; 
@@ -371,13 +372,10 @@ if (clk'event AND clk='1') then
 						if (app_rdy = '1') then 
 							app_cmd <= "001"; 
 							control_signal <= "00";
-							edge_state <= Edge_SET_ADDRESS;
+							edge_state <= Edge_CHECK_INDEX;
 						end if;
-			WHEN Edge_SET_ADDRESS => 
-						addr <= std_logic_vector(to_unsigned(PARTITION_INIT_EDGE_ARRAY(reg_partition),ADDR_WIDTH) - to_unsigned(index_edges,ADDR_WIDTH));
-						data_topipe <= (others => 'Z');
-						edge_state <= Edge_CHECK_INDEX;
 			WHEN Edge_CHECK_INDEX =>
+						addr <= std_logic_vector(to_unsigned(PARTITION_INIT_EDGE_ARRAY(reg_partition),ADDR_WIDTH) - to_unsigned(index_edges,ADDR_WIDTH));
 						if (index_edges < 2*counter_number_edges_transmitted) then 
 							edge_state <= Edge_SEND;
 							app_en <= '1';
@@ -391,11 +389,7 @@ if (clk'event AND clk='1') then
 							data_topipe <= data_frommem; 
 							index_edges <= index_edges + 1;
 							app_en <= '0';
-							if ((index_edges+1) >= 2*counter_number_edges_transmitted) then
-								edge_state <= Edge_CHECK_INDEX;
-							else
-								edge_state <= Edge_SET_ADDRESS;
-							end if;
+							edge_state <= Edge_CHECK_INDEX;
 						else
 							data_topipe <= (others => 'Z');
 						end if;
@@ -446,13 +440,11 @@ if (clk'event AND clk='1') then
 						if (app_rdy = '1') then 
 							app_cmd <= "001"; 
 							control_signal <= "01";
-							updateTX_state <= UpdateTX_SET_ADDRESS;
+							updateTX_state <= UpdateTX_CHECK_INDEX;
 						end if;
-			WHEN UpdateTX_SET_ADDRESS => 
+			WHEN UpdateTX_CHECK_INDEX =>
 						addr <= std_logic_vector(to_unsigned(PARTITION_INIT_UPDATE_ARRAY(reg_partition),ADDR_WIDTH) - to_unsigned(index_updates,ADDR_WIDTH));
 						data_topipe <= (others => 'Z');
-						updateTX_state <= UpdateTX_CHECK_INDEX;
-			WHEN UpdateTX_CHECK_INDEX =>
 						if (index_updates < 2*counter_number_updates_transmitted) and (counter_number_updates_transmitted<to_integer(unsigned(array_updates_sent(reg_partition)(DATA_WIDTH-1 downto 1))+to_unsigned(1,bits_num_updates))) then
 							updateTX_state <= UpdateTX_SEND;
 							app_en <= '1';
@@ -466,11 +458,7 @@ if (clk'event AND clk='1') then
 							data_topipe <= data_frommem; 
 							index_updates <= index_updates + 1;
 							app_en <= '0';
-							if ((index_updates+1) >= 2*counter_number_updates_transmitted) then
-								updateTX_state <= UpdateTX_CHECK_INDEX;
-							else
-								updateTX_state <= UpdateTX_SET_ADDRESS;
-							end if;
+							updateTX_state <= UpdateTX_CHECK_INDEX;
 						else
 							data_topipe <= (others => 'Z');
 						end if;

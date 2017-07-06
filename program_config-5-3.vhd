@@ -44,6 +44,9 @@ constant BITS_PRECISION: integer := 18; -- 0.0.18
 -- Factor de amortiguación (x100) --
 constant damping_factor: integer := 85;
 
+-- Ciclos de retardo en el acceso aleatorio a la DRAM --
+constant NUM_DELAY : integer := 50;
+
 -- Tamaño del Vertex set de cada partición --
 constant PARTITION_SIZE_VERTEX : partition_array :=
 (
@@ -111,9 +114,10 @@ package body program_config is
 
   function init_arrays (constant first_address : in integer; constant size : in partition_array; constant values_per_sample : in integer) return partition_array is
     variable result   : partition_array;
-    last_address := first_address;
+	 variable last_address	: integer;
   begin
 	 result(0) := first_address;
+    last_address := first_address;
     for i in 1 to NUM_PARTITIONS-1 loop
 	   result(i) := last_address - size(i-1)*values_per_sample;
 	   last_address := result(i);
